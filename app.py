@@ -2,9 +2,11 @@ import yaml
 import docker
 from sanic import Sanic
 from sanic.response import json
+import json as j
 
 app = Sanic()
 NUM_WORKERS = 5
+client = docker.from_env()
 
 
 @app.route('/start', methods=['POST'])
@@ -19,7 +21,6 @@ async def build_and_run_container(request):
     image = run_params.get('image')+':latest'
     command = run_params.get('command')
     ports = run_params.get('port_bindings')[0]
-    client = docker.from_env()
     try:
         builded_image = client.images.get(name=image)
     except:
@@ -28,20 +29,21 @@ async def build_and_run_container(request):
     return json({'container id': cont.id})
 
 
-@app.route('/stop/<int: id>', methods=['POST'])
-async def stop_container(request):
-    client = docker.from_env()
-    id = request.get('id')
-    cont = client.containers.get(id)
+@app.route('/stop/<cont_id>', methods=['POST'])
+async def stop_container(request, cont_id):
+    cont = client.containers.get(cont_id)
     cont.stop()
     cont.remove()
     return json({'status': 'stoped and removed'})
 
 
 @app.route('/list', methods=['GET'])
-def list_containers():
-    client = docker.from_env()
-    return json({'containers': client.containers.list()})
+def list_containers(request):
+    containers = client.containers.list(all=True)
+    output = {}
+    for cont in containers:
+        output[cont.name] = cont.id
+    return json({'containers': output})
 
 
 if __name__ == '__main__':
