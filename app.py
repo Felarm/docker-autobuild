@@ -42,7 +42,13 @@ def list_containers(request):
     containers = client.containers.list(all=True)
     output = {}
     for cont in containers:
-        output[cont.name] = cont.id
+        output[cont.name] = {'CONTAINER ID': cont.id,
+                             'IMAGE': cont.attrs.get('Image'),
+                             'COMMAND': cont.attrs.get('Config').get('Cmd'),
+                             'CREATED': cont.attrs.get('Created'),
+                             'STATUS': cont.attrs.get('State').get('Status'),
+                             'PORTS': cont.attrs.get('HostConfig').get('PortBindings'),
+                             }
     return json({'containers': output})
 
 

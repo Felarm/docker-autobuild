@@ -2,12 +2,12 @@ import yaml
 import docker
 from sanic import Sanic
 from sanic.response import json
-from multiprocessing.pool import ThreadPool
 from queue import Queue
 from threading import Thread
 
 app = Sanic()
-
+NUM_WORKERS = 5
+client = docker.from_env()
 
 class TaskQueue(Queue):
 
@@ -43,7 +43,7 @@ def pull_image_and_build(client, image, name, command, ports):
 
 
 @app.route('/start', methods=['POST'])
-async def run_container(request):
+async def build_and_run_container(request):
     input_file = request.files.get('file')
     with open(input_file.name, 'r') as ymlfile:
         docker_config = yaml.safe_load(ymlfile)
@@ -54,31 +54,36 @@ async def run_container(request):
     image = run_params.get('image')+':latest'
     command = run_params.get('command')
     ports = run_params.get('port_bindings')[0]
-    client = docker.from_env()
+    print(ports)
     try:
-        print('in try')
         builded_image = client.images.get(name=image)
-        cont = client.containers.run(name=name, image=builded_image, command=command, ports=ports, detach=True)
-        return json({'container id': cont.id})
     except:
-        print('in except')
-        q.add_task(pull_image_and_build, (client, image,))
-        print('task added')
-        print(q.get()[0])
-        builded_image = q.get()
-        print(builded_image)
+        builded_image = client.images.pull(name=image)
+    cont = client.containers.run(name=name, image=builded_image, command=command, ports=ports, detach=True)
+    return json({'container id': cont.id})
 
 
+@app.route('/stop/<cont_id>', methods=['POST'])
+async def stop_container(request, cont_id):
+    cont = client.containers.get(cont_id)
+    cont.stop()
+    cont.remove()
+    return json({'status': 'stoped and removed'})
 
-    #print('container id: ', cont.id)
-    #print(client.containers.list())
-    #cont.stop()
-    #print('container ', cont.id, ' stopped')
-    #cont.remove()
-    #print(client.containers.list())
-    #print(client.images.list())
-    #client.images.remove(image=image)
-    #print(client.images.list())
+
+@app.route('/list', methods=['GET'])
+def list_containers(request):
+    containers = client.containers.list(all=True)
+    output = {}
+    for cont in containers:
+        output[cont.name] = {'CONTAINER ID': cont.id,
+                             'IMAGE': cont.attrs.get('Image'),
+                             'COMMAND': cont.attrs.get('Config').get('Cmd'),
+                             'CREATED': cont.attrs.get('Created'),
+                             'STATUS': cont.attrs.get('State').get('Status'),
+                             'PORTS': cont.attrs.get('HostConfig').get('PortBindings'),
+                             }
+    return json({'containers': output})
 
 
 if __name__ == '__main__':
