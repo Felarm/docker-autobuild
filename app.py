@@ -2,10 +2,11 @@ import yaml
 import docker
 from sanic import Sanic
 from sanic.response import json
-import json as j
+
+CONTAINER_NAME_DICT = {}
+NUM_WORKERS = 5
 
 app = Sanic()
-NUM_WORKERS = 5
 client = docker.from_env()
 
 
@@ -17,6 +18,10 @@ async def build_and_run_container(request):
     for key, value in docker_config.items():
         dicti = docker_config[key]
     name = list(docker_config.keys())[0]
+    if name in CONTAINER_NAME_DICT:
+        return json({'error': 'sorry, this name is already in use. choose another one or try later'})
+    else:
+        CONTAINER_NAME_DICT[name] = None
     run_params = dicti.get('properties')
     image = run_params.get('image')+':latest'
     command = run_params.get('command')
@@ -26,6 +31,7 @@ async def build_and_run_container(request):
     except:
         builded_image = client.images.pull(name=image)
     cont = client.containers.run(name=name, image=builded_image, command=command, ports=ports, detach=True)
+    CONTAINER_NAME_DICT[name] = cont.id
     return json({'container id': cont.id})
 
 
@@ -34,7 +40,8 @@ async def stop_container(request, cont_id):
     cont = client.containers.get(cont_id)
     cont.stop()
     cont.remove()
-    return json({'status': 'stoped and removed'})
+    del CONTAINER_NAME_DICT[cont.name]
+    return json({cont_id: 'stoped and removed'})
 
 
 @app.route('/list', methods=['GET'])
