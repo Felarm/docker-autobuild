@@ -6,7 +6,7 @@ apache:
 
     image: httpd
 
-    command: echo test
+    command: httpd-foreground
 
     port_bindings:
 
